@@ -7,7 +7,6 @@ from pathlib import Path
 from django.conf import settings
 from django.shortcuts import render
 from django.utils.html import escape
-from django.http import JsonResponse
 
 from mobsf.MobSF.forms import FormUtil
 from mobsf.MobSF.utils import (
@@ -28,26 +27,9 @@ from mobsf.MobSF.views.authentication import (
 logger = logging.getLogger(__name__)
 
 
-def send_json(data):
-    return JsonResponse(data, safe=False)
-
-
-def send_error(request, err, api_mode, json_resp, exp=None):
-    """Send error message as dict or JSON."""
-    if exp:
-        res = print_n_send_error_response(request, err, api_mode, exp)
-    else:
-        res = print_n_send_error_response(request, err, api_mode)
-    if json_resp:
-        return send_json(res)
-    return res
-
-
 @login_required
 def run(request, api=False):
     """View the source of a file."""
-    json_resp = request.GET.get('json', '0') == '1'
-    api_mode = api or json_resp
     try:
         logger.info('View Java Source File')
         exp = 'Error Description'
@@ -63,7 +45,7 @@ def run(request, api=False):
             viewsource_form = ViewSourceAndroidForm(request.GET)
         if not viewsource_form.is_valid():
             err = FormUtil.errors_message(viewsource_form)
-            return send_error(request, err, api_mode, json_resp, exp)
+            return print_n_send_error_response(request, err, api, exp)
         base = Path(settings.UPLD_DIR) / md5
         if typ == 'smali':
             src = base / 'smali_source'
@@ -73,12 +55,12 @@ def run(request, api=False):
                 src, syntax, _ = find_java_source_folder(base)
             except StopIteration:
                 msg = 'Invalid directory or file extension'
-                return send_error(request, msg, api_mode, json_resp)
+                return print_n_send_error_response(request, msg, api)
 
         sfile = src / fil
         if not is_safe_path(src, sfile.as_posix()):
             msg = 'Path Traversal Detected!'
-            return send_error(request, msg, api_mode, json_resp)
+            return print_n_send_error_response(request, msg, api)
         context = {
             'title': escape(ntpath.basename(fil)),
             'file': escape(ntpath.basename(fil)),
@@ -88,13 +70,11 @@ def run(request, api=False):
             'version': settings.MOBSF_VER,
         }
         template = 'general/view.html'
-        if json_resp:
-            return send_json(context)
-        if api_mode:
+        if api:
             return context
         return render(request, template, context)
     except Exception as exp:
         logger.exception('Error Viewing Source')
         msg = str(exp)
         exp = exp.__doc__
-        return send_error(request, msg, api_mode, json_resp, exp)
+        return print_n_send_error_response(request, msg, api, exp)
