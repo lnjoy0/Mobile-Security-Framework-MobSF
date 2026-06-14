@@ -399,7 +399,16 @@ def scan_status(request, api=False):
         data = {'status': 'failed', 'message': str(exp)}
     return send_response(data, api)
 
-
+def file_download(dwd_file, filename, content_type):
+    """HTTP file download response."""
+    with open(dwd_file, 'rb') as file:
+        wrapper = FileWrapper(file)
+        response = HttpResponse(wrapper, content_type=content_type)
+        response['Content-Length'] = dwd_file.stat().st_size
+        if filename:
+            val = f'attachment; filename="{filename}"'
+            response['Content-Disposition'] = val
+        return response
 
 @login_required
 @require_http_methods(['GET'])
