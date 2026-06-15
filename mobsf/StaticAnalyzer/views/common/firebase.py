@@ -77,37 +77,6 @@ def firebase_analysis(checksum, code_an_dic):
     return findings
 
 
-def open_firebase(checksum, url):
-    # Detect Open Firebase Database
-    try:
-        if not valid_host(url):
-            logger.warning('Invalid Host: %s', url)
-            return url, False
-        purl = urlparse(url)
-        if not purl.netloc.lower().endswith('.firebaseio.com'):
-            logger.warning('Invalid Firebase URL')
-            return url, False
-        base_url = f'{purl.scheme}://{purl.netloc}/.json'
-        proxies, verify = upstream_proxy('https')
-        headers = {
-            'User-Agent': ('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1)'
-                           ' AppleWebKit/537.36 (KHTML, like Gecko) '
-                           'Chrome/39.0.2171.95 Safari/537.36')}
-        resp = requests.get(
-            base_url,
-            timeout=5,
-            headers=headers,
-            proxies=proxies,
-            verify=verify,
-            allow_redirects=False)
-        if resp.status_code == 200:
-            return base_url, True
-    except Exception as exp:
-        msg = 'Open Firebase DB detection failed'
-        logger.warning(msg)
-        append_scan_status(checksum, msg, repr(exp))
-    return url, False
-
 
 def firebase_db_check(checksum, code_an_dic):
     logger.info('Looking for Firebase URL(s)')
