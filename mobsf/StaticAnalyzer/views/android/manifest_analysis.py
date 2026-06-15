@@ -85,6 +85,122 @@ def assetlinks_check(act_name, well_knowns):
     return findings
 
 
+def _check_url(host, w_url):
+    """Check for the presence of Assetlinks URL."""
+    try:
+        iden = 'sha256_cert_fingerprints'
+        proxies, verify = upstream_proxy('https')
+        status = False
+        status_code = 0
+
+        urls = {w_url}
+        if w_url.startswith('http://'):
+            # Upgrade http to https
+            urls.add(f'https://{w_url[7:]}')
+
+        for url in urls:
+            # Additional checks to ensure that
+            # the final path is WELL_KNOWN_PATH
+            purl = urlparse(url)
+            if (purl.path != WELL_KNOWN_PATH
+                or len(purl.query) > 0
+                    or len(purl.params) > 0):
+                logger.warning('Invalid Assetlinks URL: %s', url)
+                continue
+            r = requests.get(url,
+                             timeout=5,
+                             allow_redirects=False,
+                             proxies=proxies,
+                             verify=verify)
+
+            status_code = r.status_code
+            if (str(status_code).startswith('2') and iden in str(r.json())):
+                status = True
+                break
+        if status_code in (301, 302):
+            logger.warning('Status Code: [%d], Redirecting to '
+                           'a different URL, skipping check!', status_code)
+        return {'url': w_url,
+                'host': host,
+                'status_code': status_code,
+                'status': status}
+
+    except Exception:
+        logger.error(f'Well Known Assetlinks Check for URL: {w_url}')
+        return {'url': w_url,
+                'host': host,
+                'status_code': None,
+                'status': False}
+
+
+def get_browsable_activities(node, ns):
+    """Get Browsable Activities."""
+    try:
+        browse_dic = {}
+        schemes = []
+        mime_types = []
+        hosts = []
+        ports = []
+        paths = []
+        path_prefixs = []
+        path_patterns = []
+        well_known = {}
+        catg = node.getElementsByTagName('category')
+        for cat in catg:
+            if cat.getAttribute(f'{ns}:name') == 'android.intent.category.BROWSABLE':
+                data_tag = node.getElementsByTagName('data')
+                for data in data_tag:
+                    scheme = data.getAttribute(f'{ns}:scheme')
+                    if scheme and scheme not in schemes:
+                        schemes.append(scheme)
+                    mime = data.getAttribute(f'{ns}:mimeType')
+                    if mime and mime not in mime_types:
+                        mime_types.append(mime)
+                    host = data.getAttribute(f'{ns}:host')
+                    if host and host not in hosts:
+                        hosts.append(host)
+                    port = data.getAttribute(f'{ns}:port')
+                    if port and port not in ports:
+                        ports.append(port)
+                    path = data.getAttribute(f'{ns}:path')
+                    if path and path not in paths:
+                        paths.append(path)
+                    path_prefix = data.getAttribute(f'{ns}:pathPrefix')
+                    if path_prefix and path_prefix not in path_prefixs:
+                        path_prefixs.append(path_prefix)
+                    path_pattern = data.getAttribute(f'{ns}:pathPattern')
+                    if path_pattern and path_pattern not in path_patterns:
+                        path_patterns.append(path_pattern)
+                    # Collect possible well-known paths
+                    if (scheme
+                        and scheme in ('http', 'https')
+                        and host
+                            and host != '*'):
+                        host = host.replace('*.', '').replace('#', '')
+                        if not valid_host(host):
+                            logger.warning('Invalid Host: %s', host)
+                            continue
+                        shost = f'{scheme}://{host}'
+                        if port and is_number(port):
+                            c_url = f'{shost}:{port}{WELL_KNOWN_PATH}'
+                        else:
+                            c_url = f'{shost}{WELL_KNOWN_PATH}'
+                        well_known[c_url] = shost
+        schemes = [scheme + '://' for scheme in schemes]
+        browse_dic['schemes'] = schemes
+        browse_dic['mime_types'] = mime_types
+        browse_dic['hosts'] = hosts
+        browse_dic['ports'] = ports
+        browse_dic['paths'] = paths
+        browse_dic['path_prefixs'] = path_prefixs
+        browse_dic['path_patterns'] = path_patterns
+        browse_dic['browsable'] = bool(browse_dic['schemes'])
+        browse_dic['well_known'] = well_known
+        return browse_dic
+    except Exception:
+        logger.exception('Getting Browsable Activities')
+
+
 def manifest_analysis(app_dic, man_data_dic):
     """Analyse manifest file."""
     # pylint: disable=C0301
