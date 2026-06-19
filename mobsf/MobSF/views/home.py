@@ -35,7 +35,7 @@ from mobsf.MobSF.utils import (
     python_dict,
 )
 from mobsf.MobSF.init import api_key
-from mobsf.MobSF.security import sanitize_filename, sanitize_svg
+from mobsf.MobSF.security import sanitize_filename
 from mobsf.MobSF.views.helpers import FileType
 from mobsf.MobSF.views.scanning import Scanning
 from mobsf.MobSF.views.apk_downloader import apk_download
@@ -400,6 +400,16 @@ def scan_status(request, api=False):
     return send_response(data, api)
 
 
+def file_download(dwd_file, filename, content_type):
+    """HTTP file download response."""
+    with open(dwd_file, 'rb') as file:
+        wrapper = FileWrapper(file)
+        response = HttpResponse(wrapper, content_type=content_type)
+        response['Content-Length'] = dwd_file.stat().st_size
+        if filename:
+            val = f'attachment; filename="{filename}"'
+            response['Content-Disposition'] = val
+        return response
 
 
 @login_required

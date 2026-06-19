@@ -325,4 +325,3 @@ def valid_host(host):
     finally:
         # Restore default socket timeout
         socket.setdefaulttimeout(default_timeout)
-
