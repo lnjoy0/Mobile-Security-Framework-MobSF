@@ -10,6 +10,7 @@ from django.shortcuts import (
     render,
 )
 
+from mobsf.MobSF.init import api_key
 from mobsf.MobSF.utils import (
     is_md5,
     print_n_send_error_response,
@@ -43,3 +44,39 @@ def tree_index_maker(root_dir: Path, original_root_dir_len: int):
     return _index(root_dir, original_root_dir_len)
 
 
+@login_required
+def run(request):
+    """Source Tree - Java/Smali view."""
+    try:
+        logger.info('Listing Source files')
+        if not is_md5(request.GET['md5']):
+            return print_n_send_error_response(request, 'Scan hash not found')
+        md5 = request.GET['md5']
+        typ = request.GET['type']
+        base = Path(settings.UPLD_DIR) / md5
+        if typ == 'smali':
+            src = base / 'smali_source'
+        else:
+            try:
+                src = find_java_source_folder(base)[0]
+            except StopIteration:
+                return print_n_send_error_response(
+                    request,
+                    'Invalid Directory Structure')
+
+        tree_index = tree_index_maker(src, len(src.as_posix()))
+        context = {
+            'subfiles': tree_index,
+            'title': f'{typ.capitalize()} Source',
+            'hash': md5,
+            'source_type': typ,
+            'version': settings.MOBSF_VER,
+            'api_key': api_key(settings.MOBSF_HOME),
+        }
+        template = 'static_analysis/source_tree.html'
+        return render(request, template, context)
+    except Exception:
+        logger.exception('Getting Source Files')
+        return print_n_send_error_response(
+            request,
+            'Error Getting Source Files')
