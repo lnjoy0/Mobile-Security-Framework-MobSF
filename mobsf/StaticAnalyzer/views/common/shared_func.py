@@ -97,6 +97,81 @@ def is_reserved_file_conflict(file_path):
     return False
 
 
+def unzip(checksum, app_path, ext_path):
+    """Unzip APK.
+
+    Unzip a APK archive while handling encrypted files, reserved file conflicts,
+    path traversal (Zip Slip), and permission adjustments. Some of the anti-analysis
+    techniques used by malware authors and packers are handled here.
+
+    Args:
+        checksum (str): The checksum of the file.
+        app_path (str): Path to the ZIP archive.
+        ext_path (str): Path to extract the files.
+
+    Returns:
+        list: A list of files extracted or an empty list if an error occurs.
+    """
+    msg = 'Unzipping'
+    logger.info(msg)
+    append_scan_status(checksum, msg)
+    files = []
+    original_ext_path = ext_path
+    try:
+        with zipfile.ZipFile(app_path, 'r') as zipptr:
+            files = zipptr.namelist()
+            for fileinfo in zipptr.infolist():
+                ext_path = original_ext_path
+
+                # Skip encrypted files
+                if fileinfo.flag_bits & 0x1:
+                    msg = ('Skipping encrypted file '
+                           f'{sanitize_for_logging(fileinfo.filename)}')
+                    logger.warning(msg)
+                    continue
+
+                file_path = fileinfo.filename.rstrip('/\\')  # Remove trailing slashes
+
+                # Decode the filename
+                if not isinstance(file_path, str):
+                    file_path = file_path.decode('utf-8', errors='replace')
+
+                # Check for reserved file conflict
+                if is_reserved_file_conflict(file_path):
+                    ext_path = str(Path(ext_path) / '_conflict_')
+
+                # Handle Zip Slip
+                if is_path_traversal(file_path):
+                    msg = ('Zip slip detected. skipped extracting'
+                           f' {sanitize_for_logging(file_path)}')
+                    logger.error(msg)
+                    continue
+
+                # Fix permissions
+                if fileinfo.is_dir():
+                    # Directories should have rwxr-xr-x (755)
+                    # Skip creating directories
+                    continue
+                else:
+                    # Files should have rw-r--r-- (644)
+                    fileinfo.external_attr = (0o100644 << 16) | (
+                        fileinfo.external_attr & 0xFFFF)
+
+                # Extract the file
+                try:
+                    zipptr.extract(file_path, ext_path)
+                except Exception:
+                    logger.warning(
+                        'Failed to extract %s', sanitize_for_logging(file_path))
+    except Exception as exp:
+        msg = f'Unzipping Error - {str(exp)}'
+        logger.error(msg)
+        append_scan_status(checksum, msg, repr(exp))
+        # Fallback to OS unzip
+        ofiles = os_unzip(checksum, app_path, ext_path)
+        if not files:
+            files = ofiles
+    return files
 
 
 def os_unzip(checksum, app_path, ext_path):
