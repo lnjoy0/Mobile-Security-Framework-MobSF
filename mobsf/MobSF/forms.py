@@ -36,5 +36,3 @@ class FormUtil(object):
     @staticmethod
     def errors(form):
         return form.errors.get_json_data()
-
-
