@@ -282,6 +282,30 @@ sidebar-collapse
 		return 0;
 	}
 
+	function show_file(strPath) {
+		$.ajax({
+			type: "GET",
+			url: "{% url "view_source" %}?json=1&md5={{ hash }}&type={{ source_type }}&file=" + strPath,
+			dataType: 'json',
+			success: function (strFileData) {
+				var code_block = $("pre#fileoutput")
+				code_block.text(strFileData.data);
+				code_blk = document.getElementById('fileoutput');
+				if (code_blk) {
+					EnlighterJS.enlight(code_blk, false);
+					EnlighterJS.enlight(code_blk, {
+						theme: 'enlighter',
+						linehover: false,
+						textOverflow: 'scroll',
+						highlight: get_lines(),
+						language: 'java',
+					});
+				}
+				// Jump back to top.
+				window.location.hash = "content";
+			}
+		});
+	}
 
 	function reset_tree() {
 		file_tree.jstree(true).close_all();
