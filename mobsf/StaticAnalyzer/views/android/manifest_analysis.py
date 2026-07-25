@@ -2,7 +2,6 @@
 # flake8: noqa
 """Module for android manifest analysis."""
 import logging
-from urllib.parse import urlparse
 
 import requests
 from concurrent.futures import ThreadPoolExecutor
@@ -11,8 +10,8 @@ from mobsf.MobSF.utils import (
     append_scan_status,
     is_number,
     upstream_proxy,
+    valid_host,
 )
-from mobsf.MobSF.security import valid_host
 from mobsf.StaticAnalyzer.views.android import (
     network_security,
 )
@@ -28,8 +27,6 @@ ANDROID_8_0_LEVEL = 26
 ANDROID_9_0_LEVEL = 28
 ANDROID_10_0_LEVEL = 29
 ANDROID_MANIFEST_FILE = 'AndroidManifest.xml'
-WELL_KNOWN_PATH = '/.well-known/assetlinks.json'
-
 ANDROID_API_LEVEL_MAP = {
     '1': '1.0',
     '2': '1.1',
@@ -99,14 +96,6 @@ def _check_url(host, w_url):
             urls.add(f'https://{w_url[7:]}')
 
         for url in urls:
-            # Additional checks to ensure that
-            # the final path is WELL_KNOWN_PATH
-            purl = urlparse(url)
-            if (purl.path != WELL_KNOWN_PATH
-                or len(purl.query) > 0
-                    or len(purl.params) > 0):
-                logger.warning('Invalid Assetlinks URL: %s', url)
-                continue
             r = requests.get(url,
                              timeout=5,
                              allow_redirects=False,
@@ -145,6 +134,7 @@ def get_browsable_activities(node, ns):
         path_prefixs = []
         path_patterns = []
         well_known = {}
+        well_known_path = '/.well-known/assetlinks.json'
         catg = node.getElementsByTagName('category')
         for cat in catg:
             if cat.getAttribute(f'{ns}:name') == 'android.intent.category.BROWSABLE':
@@ -178,13 +168,12 @@ def get_browsable_activities(node, ns):
                             and host != '*'):
                         host = host.replace('*.', '').replace('#', '')
                         if not valid_host(host):
-                            logger.warning('Invalid Host: %s', host)
                             continue
                         shost = f'{scheme}://{host}'
                         if port and is_number(port):
-                            c_url = f'{shost}:{port}{WELL_KNOWN_PATH}'
+                            c_url = f'{shost}:{port}{well_known_path}'
                         else:
-                            c_url = f'{shost}{WELL_KNOWN_PATH}'
+                            c_url = f'{shost}{well_known_path}'
                         well_known[c_url] = shost
         schemes = [scheme + '://' for scheme in schemes]
         browse_dic['schemes'] = schemes
